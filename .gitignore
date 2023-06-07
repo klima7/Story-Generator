@@ -2,3 +2,4 @@ conda/**
 data/**
 models/**
 logs/**
+**/__pycache__/**
