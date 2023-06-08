@@ -2,12 +2,12 @@ import glob
 import random
 
 import numpy as np
-from torch.utils.data import Dataset, IterableDataset
+from torch.utils.data import Dataset
 
 from utils import tokenize, pad
 
 
-class TextTrainDataset(IterableDataset):
+class TextTrainDataset(Dataset):
     
     def __init__(self, dataset_path, vocab, seq_length, padding=(3, 30)):
         self.samplesset_path = dataset_path
@@ -22,7 +22,8 @@ class TextTrainDataset(IterableDataset):
         return len(self.samples)
         
     def __getitem__(self, idx):
-        return self.__add_random_padding(self.samples[idx])
+        sequence, target = self.__add_random_padding(self.samples[idx])
+        return np.array(sequence, dtype=np.int32), target
         
     def __load_samples(self):
         paths = list(glob.glob(f'{self.samplesset_path}/**/*.txt', recursive=True))
