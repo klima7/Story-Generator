@@ -17,7 +17,7 @@ class LstmTextGenerator(LightningModule):
         'Pewnego dnia czerwony kapturek szedł przez las z koszyczkiem jedzenia do swojej babci, która mieszkała w lesie. Śledził go jednak zły wilk, który chciał zjeść dziewczynkę.',
     ]
     
-    VALIDATION_TEMPERATURES = [0.01, 0.2, 0.3, 0.5, 0.7]
+    VALIDATION_TEMPERATURES = [0.01, 0.1, 0.2, 0.3, 0.5, 0.7]
     
     def __init__(
         self,
