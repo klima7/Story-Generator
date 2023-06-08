@@ -107,18 +107,23 @@ class LstmTextGenerator(LightningModule):
         generated = prompt
         prompt = self.__preprocess_prompt(prompt)
         
-        for _ in range(length):
-            input_tensor = torch.unsqueeze(torch.tensor(prompt, device=self.device), dim=0)
-            logits = F.softmax(self(input_tensor), dim=1)[0]
-            word_idx = self.__sample_word_idx(logits, temperature)
-            prompt = prompt[1:] + [word_idx]
+        self.eval()
+        
+        with torch.no_grad():
+            for _ in range(length):
+                input_tensor = torch.unsqueeze(torch.tensor(prompt, device=self.device), dim=0)
+                logits = F.softmax(self(input_tensor), dim=1)[0]
+                word_idx = self.__sample_word_idx(logits, temperature)
+                prompt = prompt[1:] + [word_idx]
+                
+                word = self.vocab.lookup_token(word_idx)
+                if generated[-1] in '.!?':
+                    word = word.capitalize()
+                if word not in list('.!?,'):
+                    generated += ' '
+                generated += word
             
-            word = self.vocab.lookup_token(word_idx)
-            if generated[-1] in '.!?':
-                word = word.capitalize()
-            if word not in list('.!?,'):
-                generated += ' '
-            generated += word
+        self.train()
         
         return generated
     
