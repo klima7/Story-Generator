@@ -62,11 +62,14 @@ class LstmTextGenerator(LightningModule):
             bidirectional=self.hparams.bidirectional
         )
         
+        self.dropout = nn.Dropout(self.hparams.dropout)
+        
         self.fc = nn.Linear((2 if self.hparams.bidirectional else 1)*self.hparams.lstm_hidden_size, len(self.vocab))
         
     def forward(self, x):
         out = self.embed(x)
         out, _ = self.lstm(out)
+        out = self.dropout(out)
         out = self.fc(out[:, -1, :])
         return out
         
