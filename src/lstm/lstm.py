@@ -6,25 +6,17 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningModule
+from transformers import XLMTokenizer
 
 from dataset import TextTrainDataset
-from utils import tokenize, pad
+from utils import pad
 
 
 class LstmTextGenerator(LightningModule):
-    
-    VALIDATION_PROMPTS = [
-        'Pewnego dnia czerwony kapturek szedł przez las z koszyczkiem jedzenia do swojej babci, która mieszkała w lesie. Śledził go jednak zły wilk, który chciał zjeść dziewczynkę.',
-    ]
-    
-    VALIDATION_TEMPERATURES = [0.01, 0.1, 0.2, 0.3, 0.5, 0.7]
-    
+
     def __init__(
         self,
-        
         train_dataset_path,
-        vocabulary_size,
-        pad_token_id,
         
         # architecture
         embedding_dim=100,
@@ -43,10 +35,12 @@ class LstmTextGenerator(LightningModule):
         super().__init__()
         self.save_hyperparameters()
         
+        self.tokenizer = XLMTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+        
         self.embed = nn.Embedding(
-            num_embeddings=self.hparams.vocabulary_size,
+            num_embeddings=len(self.tokenizer),
             embedding_dim=self.hparams.embedding_dim,
-            padding_idx=self.hparams.pad_token_id
+            padding_idx=self.tokenizer.pad_token_id
         )
         
         self.lstm = nn.LSTM(
@@ -60,7 +54,7 @@ class LstmTextGenerator(LightningModule):
         
         self.dropout = nn.Dropout(self.hparams.dropout)
         
-        self.fc = nn.Linear((2 if self.hparams.bidirectional else 1)*self.hparams.lstm_hidden_size, self.hparams.vocabulary_size)
+        self.fc = nn.Linear((2 if self.hparams.bidirectional else 1)*self.hparams.lstm_hidden_size, len(self.tokenizer))
         
     def forward(self, x):
         out = self.embed(x)
@@ -80,33 +74,38 @@ class LstmTextGenerator(LightningModule):
         optimizer = Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
     
-    # def train_dataloader(self):
-    #     dataset = TextTrainDataset(
-    #         dataset_path=self.hparams.train_dataset_path,
-    #         vocab=self.vocab,
-    #         seq_length=self.hparams.seq_length,
-    #         padding=self.hparams.padding
-    #     )
+    def train_dataloader(self):
+        dataset = TextTrainDataset(
+            dataset_path=self.hparams.train_dataset_path,
+            tokenizer=self.tokenizer,
+            seq_length=self.hparams.seq_length,
+            padding=self.hparams.padding
+        )
         
-    #     return DataLoader(
-    #         dataset=dataset,
-    #         batch_size=self.hparams.batch_size,
-    #         shuffle=True,
-    #         num_workers=0
-    #     )
+        return DataLoader(
+            dataset=dataset,
+            batch_size=self.hparams.batch_size,
+            shuffle=True,
+            num_workers=0
+        )
         
     def generate(self, prompt, length=50, temperature=0.5):
-        generated = prompt[:]
-        prompt = pad(prompt, self.hparams.seq_length, self.hparams.pad_token_id)
+        prompt_ids = self.tokenizer.encode(prompt)[1:-1]
+        generated_ids = self.__generate_ids(prompt_ids, length, temperature)
+        generated_text = self.tokenizer.decode(generated_ids)
+        return generated_text
         
+    def __generate_ids(self, prompt_ids, length=50, temperature=0.5):
+        generated = prompt_ids[:]
+        prompt_ids = pad(prompt_ids, self.hparams.seq_length, self.tokenizer.pad_token_id)
         self.eval()
         
         with torch.no_grad():
             for _ in range(length):
-                input_tensor = torch.unsqueeze(torch.tensor(prompt, device=self.device), dim=0)
+                input_tensor = torch.unsqueeze(torch.tensor(prompt_ids, device=self.device), dim=0)
                 logits = F.softmax(self(input_tensor), dim=1)[0]
                 word_idx = self.__sample_word_idx(logits, temperature)
-                prompt = prompt[1:] + [word_idx]
+                prompt_ids = prompt_ids[1:] + [word_idx]
                 generated.append(word_idx)
             
         self.train()
