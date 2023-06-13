@@ -9,14 +9,12 @@ from utils import tokenize, pad
 
 class TextTrainDataset(Dataset):
     
-    def __init__(self, dataset_path, vocab, seq_length, padding=(3, 30)):
+    def __init__(self, dataset_path, tokenizer, seq_length, padding=(3, 30)):
         self.samplesset_path = dataset_path
-        self.vocab = vocab
+        self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.padding = padding
         self.samples = self.__load_samples()
-        
-        self.pad_token_idx = self.vocab.get_stoi()['<PAD>']
         
     def __len__(self):
         return len(self.samples)
@@ -39,10 +37,7 @@ class TextTrainDataset(Dataset):
                 
     def __get_samples_from_text(self, text):
         samples = []
-        
-        tokenized = tokenize(text, flatten=True)
-        tokenized = self.vocab(tokenized)
-        tokenized = list(filter(lambda token: token != -1, tokenized))
+        tokenized = self.tokenizer.encode(text)[1:-1]
         
         start_idx = -self.seq_length + self.padding[0]
         end_idx = len(tokenized) - self.seq_length - 1
@@ -56,5 +51,5 @@ class TextTrainDataset(Dataset):
     def __add_random_padding(self, sample):
         sequence, target = sample
         sequence_len = min(random.randint(self.padding[0], self.padding[1]), self.seq_length)
-        pad_sequence = pad(sequence[:sequence_len], self.seq_length, pad_token=self.pad_token_idx)
+        pad_sequence = pad(sequence[:sequence_len], self.seq_length, pad_token=self.tokenizer.pad_token_id)
         return pad_sequence, target
