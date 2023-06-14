@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from pytorch_lightning import LightningModule
+from lightning.pytorch import LightningModule
 from transformers import XLMTokenizer
 
 from dataset import TextTrainDataset
