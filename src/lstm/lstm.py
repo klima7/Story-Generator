@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from lightning.pytorch import LightningModule
+from lightning.pytorch.utilities import grad_norm
 from transformers import XLMTokenizer
 
 from dataset import TextTrainDataset
@@ -56,6 +57,8 @@ class LstmTextGenerator(LightningModule):
         
         self.fc = nn.Linear((2 if self.hparams.bidirectional else 1)*self.hparams.lstm_hidden_size, len(self.tokenizer))
         
+        self.loss = nn.CrossEntropyLoss()
+        
     def forward(self, x):
         out = self.embed(x)
         out, _ = self.lstm(out)
@@ -65,8 +68,8 @@ class LstmTextGenerator(LightningModule):
         
     def training_step(self, batch, batch_no):
         texts, targets = batch
-        predicted = self.forward(texts)
-        loss = F.cross_entropy(predicted, targets)
+        predicted = self(texts)
+        loss = self.loss(predicted, targets)
         self.log('train_loss', loss)
         return loss
     
@@ -74,20 +77,20 @@ class LstmTextGenerator(LightningModule):
         optimizer = Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
     
-    def train_dataloader(self):
-        dataset = TextTrainDataset(
-            dataset_path=self.hparams.train_dataset_path,
-            tokenizer=self.tokenizer,
-            seq_length=self.hparams.seq_length,
-            padding=self.hparams.padding
-        )
+    # def train_dataloader(self):
+    #     dataset = TextTrainDataset(
+    #         dataset_path=self.hparams.train_dataset_path,
+    #         tokenizer=self.tokenizer,
+    #         seq_length=self.hparams.seq_length,
+    #         padding=self.hparams.padding
+    #     )
         
-        return DataLoader(
-            dataset=dataset,
-            batch_size=self.hparams.batch_size,
-            shuffle=True,
-            num_workers=0
-        )
+    #     return DataLoader(
+    #         dataset=dataset,
+    #         batch_size=self.hparams.batch_size,
+    #         shuffle=True,
+    #         num_workers=0
+    #     )
         
     def generate(self, prompt, length=50, temperature=0.5):
         prompt_ids = self.tokenizer.encode(prompt)[1:-1]
@@ -112,8 +115,12 @@ class LstmTextGenerator(LightningModule):
         return generated
     
     @staticmethod
-    def __sample_word_idx(logits, temperature=0.5):
+    def __sample_word_idx(logits, temperature=1.0):
         scaled_logits = torch.log(logits) / temperature
         adjusted_probs = F.softmax(scaled_logits, dim=-1)
         next_word_index = torch.multinomial(adjusted_probs, num_samples=1).item()
         return next_word_index
+
+    def on_before_optimizer_step(self, optimizer):
+        norms = grad_norm(self, norm_type=2)
+        self.log_dict(norms)

@@ -9,11 +9,12 @@ from utils import tokenize, pad
 
 class TextTrainDataset(Dataset):
     
-    def __init__(self, dataset_path, tokenizer, seq_length, padding=(3, 30)):
+    def __init__(self, dataset_path, tokenizer, seq_length, padding=(3, 30), remove_dialogs=True):
         self.samplesset_path = dataset_path
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.padding = padding
+        self.remove_dialogs = remove_dialogs
         self.samples = self.__load_samples()
         
     def __len__(self):
@@ -28,8 +29,7 @@ class TextTrainDataset(Dataset):
         data = []
         
         for path in paths:
-            with open(path, encoding='utf-8') as f:
-                text = f.read()
+            text = self.__read_text_from_file(path)
             samples = self.__get_samples_from_text(text)
             data.extend(samples)
                 
@@ -48,8 +48,19 @@ class TextTrainDataset(Dataset):
             samples.append((sequence, target))
             
         return samples
+
     def __add_random_padding(self, sample):
         sequence, target = sample
         sequence_len = min(random.randint(self.padding[0], self.padding[1]), self.seq_length)
         pad_sequence = pad(sequence[:sequence_len], self.seq_length, pad_token=self.tokenizer.pad_token_id)
         return pad_sequence, target
+
+    def __read_text_from_file(self, path):
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        if self.remove_dialogs:
+            text = self.__remove_dialogs(text)
+        return text
+
+    def __remove_dialogs(text):
+        ...
