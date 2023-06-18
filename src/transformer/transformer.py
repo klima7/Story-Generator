@@ -18,8 +18,8 @@ class TransformerLightning(LightningModule):
         seq_length,
         tokenizer_name,
         d_model=512,
-        num_heads=8,
-        num_layers=6,
+        n_heads=8,
+        n_layers=6,
         d_ff=2048,
         dropout=0.1,
         
@@ -33,10 +33,10 @@ class TransformerLightning(LightningModule):
         self.tokenizer = XLMTokenizer.from_pretrained(self.hparams.tokenizer_name)
         
         self.transformer = EncoderOnlyTransformer(
-            src_vocab_size=len(self.tokenizer),
+            vocab_size=len(self.tokenizer),
             d_model=self.hparams.d_model,
-            num_heads=self.hparams.num_heads,
-            num_layers=self.hparams.num_layers,
+            n_heads=self.hparams.n_heads,
+            n_layers=self.hparams.n_layers,
             d_ff=self.hparams.d_ff,
             max_seq_length=self.hparams.seq_length,
             dropout=self.hparams.dropout,

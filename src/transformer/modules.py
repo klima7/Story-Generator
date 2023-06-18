@@ -1,124 +1,124 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.utils.data as data
 import math
-import copy
+import torch.nn as nn
+import torch.nn.functional as F
 
 
-class PositionalEncoding(nn.Module):
+class PositionalEncodingLayer(nn.Module):
+    
     def __init__(self, d_model, max_seq_length):
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
         
-        pe = torch.zeros(max_seq_length, d_model)
-        position = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
+        enc = torch.zeros(max_seq_length, d_model)
+        pos = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(1)
+        div = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
         
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
+        enc[:, 0::2] = torch.sin(pos * div)
+        enc[:, 1::2] = torch.cos(pos * div)
         
-        self.register_buffer('pe', pe.unsqueeze(0))
+        self.register_buffer('enc', enc.unsqueeze(0))
         
     def forward(self, x):
-        return x + self.pe[:, :x.size(1)]
+        return x + self.enc[:, :x.size(1)]
 
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model, num_heads):
-        super(MultiHeadAttention, self).__init__()
-        assert d_model % num_heads == 0
+class MultiHeadAttentionLayer(nn.Module):
+    
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        assert d_model % n_heads == 0
         
         self.d_model = d_model
-        self.num_heads = num_heads
-        self.d_k = d_model // num_heads
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
         
-        self.W_q = nn.Linear(d_model, d_model)
-        self.W_k = nn.Linear(d_model, d_model)
-        self.W_v = nn.Linear(d_model, d_model)
-        self.W_o = nn.Linear(d_model, d_model)
+        self.fc_q = nn.Linear(d_model, d_model)
+        self.fc_k = nn.Linear(d_model, d_model)
+        self.fc_v = nn.Linear(d_model, d_model)
+        self.fc_o = nn.Linear(d_model, d_model)
         
-    def scaled_dot_product_attention(self, Q, K, V, mask=None):
-        attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
-        if mask is not None:
-            mask_value = -1e9 if Q.dtype == torch.float32 else -1e+4
-            attn_scores = attn_scores.masked_fill(mask == 0, mask_value)
-        attn_probs = torch.softmax(attn_scores, dim=-1)
-        output = torch.matmul(attn_probs, V)
-        return output
+    def forward(self, q, k, v, mask=None):
+        q = self.__separate_heads(self.fc_q(q))
+        k = self.__separate_heads(self.fc_k(k))
+        v = self.__separate_heads(self.fc_v(v))
         
-    def split_heads(self, x):
-        batch_size, seq_length, d_model=x.size()
-        return x.view(batch_size, seq_length, self.num_heads, self.d_k).transpose(1, 2)
+        output = self.__attention(q, k, v, mask)
+        return self.fc_o(self.__merge_heads(output))
+    
+    def __attention(self, q, k, v, mask):
+        mask_value = -1e9 if q.dtype == torch.float32 else -1e+4
         
-    def combine_heads(self, x):
-        batch_size, _, seq_length, d_k = x.size()
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
+        scores = scores.masked_fill(mask == 0, mask_value)
+        probs = torch.softmax(scores, dim=-1)
+        return torch.matmul(probs, v)
+        
+    def __separate_heads(self, x):
+        batch_size, seq_length, _ = x.size()
+        return x.view(batch_size, seq_length, self.n_heads, self.d_k).transpose(1, 2)
+        
+    def __merge_heads(self, x):
+        batch_size, _, seq_length, _ = x.size()
         return x.transpose(1, 2).contiguous().view(batch_size, seq_length, self.d_model)
-        
-    def forward(self, Q, K, V, mask=None):
-        Q = self.split_heads(self.W_q(Q))
-        K = self.split_heads(self.W_k(K))
-        V = self.split_heads(self.W_v(V))
-        
-        attn_output = self.scaled_dot_product_attention(Q, K, V, mask)
-        output = self.W_o(self.combine_heads(attn_output))
-        return output
     
 
-class PositionWiseFeedForward(nn.Module):
+class FeedForwardLayer(nn.Module):
+    
     def __init__(self, d_model, d_ff):
-        super(PositionWiseFeedForward, self).__init__()
+        super().__init__()
         self.fc1 = nn.Linear(d_model, d_ff)
         self.fc2 = nn.Linear(d_ff, d_model)
-        self.relu = nn.ReLU()
 
     def forward(self, x):
-        return self.fc2(self.relu(self.fc1(x)))
+        return self.fc2(F.relu(self.fc1(x)))
     
     
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff, dropout):
-        super(EncoderLayer, self).__init__()
-        self.self_attn = MultiHeadAttention(d_model, num_heads)
-        self.feed_forward = PositionWiseFeedForward(d_model, d_ff)
+    
+    def __init__(self, d_model, n_heads, d_ff, dropout):
+        super().__init__()
+        self.attn = MultiHeadAttentionLayer(d_model, n_heads)
+        self.ff = FeedForwardLayer(d_model, d_ff)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
         
     def forward(self, x, mask):
-        attn_output = self.self_attn(x, x, x, mask)
-        x = self.norm1(x + self.dropout(attn_output))
-        ff_output = self.feed_forward(x)
-        x = self.norm2(x + self.dropout(ff_output))
+        x_skip = self.attn(x, x, x, mask)
+        x = self.norm1(x + self.dropout(x_skip))
+        
+        x_skip = self.ff(x)
+        x = self.norm2(x + self.dropout(x_skip))
         return x
 
 
 class EncoderOnlyTransformer(nn.Module):
-    def __init__(self, src_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, mask_token=0):
-        super(EncoderOnlyTransformer, self).__init__()
-        self.encoder_embedding = nn.Embedding(src_vocab_size, d_model)
-        self.positional_encoding = PositionalEncoding(d_model, max_seq_length)
-
-        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)])
-
-        self.fc = nn.Linear(d_model, src_vocab_size)
+    
+    def __init__(self, vocab_size, d_model, n_heads, n_layers, d_ff, max_seq_length, dropout, mask_token=0):
+        super().__init__()
+        
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.positional_encoding = PositionalEncodingLayer(d_model, max_seq_length)
+        self.layers = nn.ModuleList([EncoderLayer(d_model, n_heads, d_ff, dropout) for _ in range(n_layers)])
+        
+        self.fc = nn.Linear(d_model, vocab_size)
         self.dropout = nn.Dropout(dropout)
         
         self.mask_token = mask_token
 
-    def generate_mask(self, tgt):
-        tgt_mask = (tgt != self.mask_token).unsqueeze(1).unsqueeze(3)
-        seq_length = tgt.size(1)
-        nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length, device=tgt.device), diagonal=1)).bool()
-        tgt_mask = tgt_mask & nopeak_mask
-        return tgt_mask
+    def forward(self, x):
+        mask = self.__create_mask(x)
+        output = self.dropout(self.positional_encoding(self.embedding(x)))
 
-    def forward(self, src):
-        src_mask = self.generate_mask(src)
-        src_embedded = self.dropout(self.positional_encoding(self.encoder_embedding(src)))
+        for enc_layer in self.layers:
+            output = enc_layer(output, mask)
 
-        enc_output = src_embedded
-        for enc_layer in self.encoder_layers:
-            enc_output = enc_layer(enc_output, src_mask)
-
-        output = self.fc(enc_output)
+        output = self.fc(output)
         return output
+
+    def __create_mask(self, x):
+        mask = (x != self.mask_token).unsqueeze(1).unsqueeze(3)
+        seq_length = x.size(1)
+        nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length, device=x.device), diagonal=1)).bool()
+        mask = mask & nopeak_mask
+        return mask
