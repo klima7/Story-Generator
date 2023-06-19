@@ -92,24 +92,26 @@ class LstmTextGenerator(LightningModule):
     #         num_workers=0
     #     )
         
-    def generate(self, prompt, length=50, temperature=0.5):
+    def generate(self, prompt, length=50, temperature=0.5, progress_callback=None):
         prompt_ids = self.tokenizer.encode(prompt)[1:-1]
-        generated_ids = self.__generate_ids(prompt_ids, length, temperature)
+        generated_ids = self.__generate_ids(prompt_ids, length, temperature, progress_callback)
         generated_text = self.tokenizer.decode(generated_ids)
         return generated_text
         
-    def __generate_ids(self, prompt_ids, length=50, temperature=0.5):
+    def __generate_ids(self, prompt_ids, length=50, temperature=0.5, progress_callback=None):
         generated = prompt_ids[:]
         prompt_ids = pad(prompt_ids, self.hparams.seq_length, self.tokenizer.pad_token_id)
         self.eval()
         
         with torch.no_grad():
-            for _ in range(length):
+            for i in range(length):
                 input_tensor = torch.unsqueeze(torch.tensor(prompt_ids, device=self.device), dim=0)
                 logits = F.softmax(self(input_tensor), dim=1)[0]
                 word_idx = self.__sample_word_idx(logits, temperature)
                 prompt_ids = prompt_ids[1:] + [word_idx]
                 generated.append(word_idx)
+                if progress_callback:
+                    progress_callback(i+1)
             
         self.train()
         return generated
