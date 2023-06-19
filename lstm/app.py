@@ -4,7 +4,7 @@ from lstm import LstmTextGenerator
 
 @st.cache_resource
 def get_model():
-    ckpt_path = '../lstm/logs/version_23/checkpoints/epoch=57-step=187000.ckpt'
+    ckpt_path = 'best.ckpt'
     model = LstmTextGenerator.load_from_checkpoint(ckpt_path)
     return model
     
