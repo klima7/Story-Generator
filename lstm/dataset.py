@@ -1,21 +1,32 @@
+import re
 import glob
 import random
+import pickle
+from pathlib import Path
 
 import numpy as np
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
-from utils import tokenize, pad
+from utils import pad
 
 
 class TextTrainDataset(Dataset):
     
-    def __init__(self, dataset_path, tokenizer, seq_length, padding=(3, 30), remove_dialogs=True):
+    def __init__(self, dataset_path, tokenizer, seq_length, padding=(3, 30), remove_dialogs=True, remove_special_chars=False, lowercase=False, tqdm=False, cache_path=None, cache_ignore=False, min_line_length=0):
         self.samplesset_path = dataset_path
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.padding = padding
         self.remove_dialogs = remove_dialogs
-        self.samples = self.__load_samples()
+        self.remove_special_chars = remove_special_chars
+        self.lowercase = lowercase
+        self.tqdm = tqdm
+        self.cache_path = cache_path
+        self.cache_ignore = cache_ignore
+        self.min_line_length = min_line_length
+        
+        self.samples = self.__get_samples()
         
     def __len__(self):
         return len(self.samples)
@@ -23,10 +34,31 @@ class TextTrainDataset(Dataset):
     def __getitem__(self, idx):
         sequence, target = self.__add_random_padding(self.samples[idx])
         return np.array(sequence, dtype=np.int32), target
+    
+    def __get_samples(self):
+        if self.cache_path is None or self.cache_ignore or not Path(self.cache_path).exists():
+            samples = self.__create_samples()
+            self.__save_samples_to_cache(samples)
+            return samples
+        else:
+            return self.__load_samples_from_cache()
         
-    def __load_samples(self):
+    def __load_samples_from_cache(self):
+        with open(self.cache_path, 'rb') as f:
+            return pickle.load(f)
+        
+    def __save_samples_to_cache(self, samples):
+        Path(self.cache_path).parent.mkdir(parents=True, exist_ok=True) 
+        with open(self.cache_path, 'wb') as f:
+            return pickle.dump(samples, f)
+        
+    def __create_samples(self):
         paths = list(glob.glob(f'{self.samplesset_path}/**/*.txt', recursive=True))
+        random.shuffle(paths)
         data = []
+        
+        if self.tqdm:
+            paths = tqdm(paths)
         
         for path in paths:
             text = self.__read_text_from_file(path)
@@ -57,10 +89,25 @@ class TextTrainDataset(Dataset):
 
     def __read_text_from_file(self, path):
         with open(path, encoding='utf-8') as f:
-            text = f.read()
-        if self.remove_dialogs:
-            text = self.__remove_dialogs(text)
-        return text
+            lines = f.readlines()
+            lines = map(self.__preprocess_line, lines)
+            lines = filter(lambda line: len(line) > self.min_line_length, lines)
+            if self.remove_dialogs:
+                lines = self.__remove_dialogs(lines)
+            text = '\n'.join(lines)
+            if self.remove_special_chars:
+                text = re.sub(r'[^a-ząćęłńóśźż.,!? \n]', ' ', text, flags=re.IGNORECASE)
+            return text
 
-    def __remove_dialogs(text):
-        ...
+    def __remove_dialogs(self, lines):
+        return filter(lambda line: not self.__is_dialog_line(line), lines)
+    
+    def __preprocess_line(self, line):
+        line = line.strip()
+        if self.lowercase:
+            line = line.lower()
+        return line
+        
+    @staticmethod
+    def __is_dialog_line(line):
+        return '—' in line or '–' in line or '-' in line or '„' in line or '"' in line
