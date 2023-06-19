@@ -1,5 +1,3 @@
+**/__pycache__/**
 conda/**
 data/**
-models/**
-logs/**
-**/__pycache__/**
