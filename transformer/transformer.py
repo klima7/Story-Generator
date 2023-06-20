@@ -59,24 +59,26 @@ class TransformerLightning(LightningModule):
         optimizer = Adam(self.parameters(), lr=self.hparams.lr, betas=(0.9, 0.98), eps=1e-9)
         return optimizer
     
-    def generate(self, prompt, length=50, temperature=0.5):
+    def generate(self, prompt, length=50, temperature=0.5, progress_callback=None):
         src_ids = self.tokenizer.encode(prompt)[1:-1]
-        generated_ids = self.__generate_ids(src_ids, length, temperature)
+        generated_ids = self.__generate_ids(src_ids, length, temperature, progress_callback)
         generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         return generated_text
     
-    def __generate_ids(self, prompt_ids, length=200, temperature=0.5):
+    def __generate_ids(self, prompt_ids, length=200, temperature=0.5, progress_callback=None):
         ids = list(prompt_ids)
         self.eval()
         
         with torch.no_grad():
-            for _ in range(length):
+            for i in range(length):
                 input_ids = pad(ids[-self.hparams.seq_length:], self.hparams.seq_length, self.tokenizer.pad_token_id)
                 input_tensor = torch.unsqueeze(torch.tensor(input_ids, device=self.device), dim=0)
                 
                 output = self(input_tensor)
                 word_id = self.__sample_word_id(output[0][-1], temperature)
                 ids.append(word_id)
+                if progress_callback:
+                    progress_callback(i+1)
             
         self.train()
         return ids
