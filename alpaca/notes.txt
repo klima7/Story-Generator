@@ -1,0 +1,3 @@
+docker build -t klima77/alpaca-polish-story-generator .
+
+docker run --name alpca-story2 --rm -it --gpus all --expose 80 klima77/alpaca-polish-story-generator
