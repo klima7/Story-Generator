@@ -1,4 +1,6 @@
 import streamlit as st
+import torch
+
 from transformer import TransformerLightning
 
 
@@ -6,6 +8,8 @@ from transformer import TransformerLightning
 def get_model():
     ckpt_path = 'best.ckpt'
     model = TransformerLightning.load_from_checkpoint(ckpt_path)
+    if torch.cuda.is_available():
+        model = model.cuda()
     return model
     
 
