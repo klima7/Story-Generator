@@ -1,11 +1,13 @@
-FROM bitnami/pytorch:2.0.1
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
 
 ENV HF_HOME=/app/.cache
 
-COPY requirements.txt /app/requirements.txt
+WORKDIR /app
+
+COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
-COPY . /app
+COPY . .
 
 EXPOSE 80
 

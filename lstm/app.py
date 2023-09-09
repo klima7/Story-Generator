@@ -1,4 +1,6 @@
 import streamlit as st
+import torch
+
 from lstm import LstmTextGenerator
 
 
@@ -6,6 +8,8 @@ from lstm import LstmTextGenerator
 def get_model():
     ckpt_path = 'best.ckpt'
     model = LstmTextGenerator.load_from_checkpoint(ckpt_path)
+    if torch.cuda.is_available():
+        model = model.cuda()
     return model
     
 
