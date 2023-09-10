@@ -96,6 +96,7 @@ class LstmTextGenerator(LightningModule):
         prompt_ids = self.tokenizer.encode(prompt)[1:-1]
         generated_ids = self.__generate_ids(prompt_ids, length, temperature, progress_callback)
         generated_text = self.tokenizer.decode(generated_ids)
+        generated_text = self.__fix_case(generated_text)
         return generated_text
         
     def __generate_ids(self, prompt_ids, length=50, temperature=0.5, progress_callback=None):
@@ -126,3 +127,10 @@ class LstmTextGenerator(LightningModule):
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self, norm_type=2)
         self.log_dict(norms)
+        
+    def __fix_case(self, text):
+        words = text.split(' ')
+        for i in range(1, len(words)):
+            if words[i-1].endswith('.'):
+                words[i] = words[i].capitalize()
+        return ' '.join(words)
