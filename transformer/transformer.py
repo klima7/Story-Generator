@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -75,7 +76,9 @@ class TransformerLightning(LightningModule):
                 input_tensor = torch.unsqueeze(torch.tensor(input_ids, device=self.device), dim=0)
                 
                 output = self(input_tensor)
-                word_id = self.__sample_word_id(output[0][-1], temperature)
+                logits = output[0][-1]
+                logits = self.__apply_repetition_penalty(logits, ids, penalty=0.7)
+                word_id = self.__sample_word_id(logits, temperature)
                 ids.append(word_id)
                 if progress_callback:
                     progress_callback(i+1)
@@ -84,8 +87,19 @@ class TransformerLightning(LightningModule):
         return ids
         
     @staticmethod
-    def __sample_word_id(outputs, temperature=1.0):
+    def __sample_word_id(outputs, temperature=0.7):
         scaled_logits = torch.log_softmax(outputs, dim=0) / temperature
         adjusted_probs = F.softmax(scaled_logits, dim=-1)
         next_word_index = torch.multinomial(adjusted_probs, num_samples=1).item()
         return next_word_index
+
+    @staticmethod
+    def __apply_repetition_penalty(logits, previous_tokens, penalty):
+        previous_tokens = previous_tokens[-30:]
+        token_counts = torch.zeros(logits.shape, dtype=torch.int32, device=logits.device)
+        for token in previous_tokens:
+            token_counts[token] += 1
+        
+        penalty = torch.pow(penalty, token_counts)
+        logits *= penalty
+        return logits
