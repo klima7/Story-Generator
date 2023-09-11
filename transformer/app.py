@@ -15,7 +15,7 @@ def get_model():
 
 st.title('Transformer Story generator')
 
-prompt = st.text_area('Prompt', value='Dawno, dawno temu, był sobie')
+prompt = st.text_area('Prompt', value='Dawno, dawno temu był sobie chłopiec')
 temperature = st.slider('Temperature', 0.0, 1.0, 0.3, 0.01)
 length = st.number_input('Length', min_value=10, max_value=2_000, value=300, step=100)
 
