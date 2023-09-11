@@ -26,3 +26,8 @@ Generating polish stories with three different approaches: LSTM, basic transform
 cd lstm/transformer/alpaca
 docker compose up
 ```
+
+Streamlit GUI will be available under [http://localhost:80](http://localhost/). 
+
+Default values for options like `temperature` are selected to work fine.
+
