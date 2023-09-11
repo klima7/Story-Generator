@@ -1,9 +1,11 @@
 version: '3.1'
 services:
   darkness:
-    build:
-      context: '.'
-      dockerfile: 'Dockerfile'
+    # build:
+    #   context: '.'
+    #   dockerfile: 'Dockerfile'
+    image: klima77/alpaca-polish-story-generator
+    
     container_name: alpaca-story-generator
     ports:
       - 80:80
